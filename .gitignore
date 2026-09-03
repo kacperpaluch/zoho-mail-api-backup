@@ -1,0 +1,24 @@
+# dane backupu - nigdy do repo
+data/
+docker-compose.override.yml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Ogolne
+.DS_Store
+*.log
+*.tmp
+.env
+.env.local
+
+# lokalna konfiguracja agentow - zawiera klucze API
+.mcp.json
+opencode.json
+.claude/
+.codex/
+.opencode/
+.skillbox/

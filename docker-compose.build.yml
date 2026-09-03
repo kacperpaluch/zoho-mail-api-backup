@@ -1,0 +1,18 @@
+services:
+  zoho-backup:
+    build: .
+    image: kpa90/zoho-mail-api-backup:latest
+    container_name: zoho-backup
+    restart: unless-stopped
+    environment:
+      # api-console.zoho.eu -> Self Client -> scope:
+      # ZohoMail.messages.READ,ZohoMail.folders.READ,ZohoMail.accounts.READ
+      ZOHO_CLIENT_ID: ""
+      ZOHO_CLIENT_SECRET: ""
+      ZOHO_REFRESH_TOKEN: ""
+      ZOHO_DC: eu                 # region konta: eu | com | in | com.au | jp
+      SYNC_INTERVAL_HOURS: 6      # co ile godzin dociagac nowe maile
+      ZIP_INTERVAL_DAYS: 7        # co ile dni zip ze stanem skrzynki na teraz
+      REQ_INTERVAL: 2.1           # odstep miedzy requestami (limit Zoho: 30/min)
+    volumes:
+      - ./data:/data              # data/mail/<folder>/*.eml  +  data/zips/*.zip
