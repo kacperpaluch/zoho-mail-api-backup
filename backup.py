@@ -28,8 +28,12 @@ def cron_due(expr, t):
     """Podzbior crona: 'min godz dzien miesiac dzien_tygodnia', 0 = niedziela.
     Obsluguje liczby, listy (1,5), zakresy (1-5), kroki (*/15) i '*'."""
     m, h, dom, mon, dow = expr.split()
+    wd = (t.weekday() + 1) % 7
     return (_field(m, t.minute, 59) and _field(h, t.hour, 23) and _field(dom, t.day, 31)
-            and _field(mon, t.month, 12) and _field(dow.replace("7", "0"), (t.weekday() + 1) % 7, 6))
+            and _field(mon, t.month, 12)
+            # niedziela to 0 albo 7: sprawdzamy obie numeracje zamiast podmieniac
+            # string w wyrazeniu - to psulo zakresy w stylu 1-7
+            and (_field(dow, wd, 7) or (wd == 0 and _field(dow, 7, 7))))
 
 def log(*a): print(datetime.now().strftime("%F %T"), *a, flush=True)
 
@@ -38,8 +42,14 @@ def token():
         return _tok[0]
     q = urllib.parse.urlencode({"refresh_token": REFRESH, "client_id": CID,
                                 "client_secret": SECRET, "grant_type": "refresh_token"})
-    r = json.load(urllib.request.urlopen(
-        f"https://accounts.zoho.{DC}/oauth/v2/token?{q}", data=b"", timeout=60))
+    try:
+        r = json.load(urllib.request.urlopen(
+            f"https://accounts.zoho.{DC}/oauth/v2/token?{q}", data=b"", timeout=60))
+    except urllib.error.HTTPError as e:
+        msg = f"OAuth HTTP {e.code}: {e.read(500).decode('utf-8', 'replace').strip()}"
+        if e.code < 500:
+            raise SystemExit(msg)      # invalid_grant itp. - retry nic nie da
+        raise RuntimeError(msg)
     if "access_token" not in r:
         raise SystemExit(f"OAuth failed: {r}")
     _tok[:] = [r["access_token"], time.time() + r.get("expires_in", 3600) - 60]
@@ -58,8 +68,9 @@ def api(path, **params):
         try:
             return json.load(urllib.request.urlopen(req, timeout=120)).get("data")
         except urllib.error.HTTPError as e:
+            body = e.read(500).decode("utf-8", "replace").strip()   # Zoho podaje powod w body
             if e.code not in (429, 500, 502, 503, 504) or attempt == 4:
-                raise RuntimeError(f"HTTP {e.code} na {path}") from None
+                raise RuntimeError(f"HTTP {e.code} na {path}: {body}") from None
             wait = 60 * (attempt + 1)
             log(f"HTTP {e.code}, czekam {wait}s")
             time.sleep(wait)
@@ -112,9 +123,14 @@ def snapshot(current):
 
 if __name__ == "__main__":
     log(f"start: sync co {SYNC_EVERY / 3600:g}h, zip wg crona '{ZIP_CRON}' ({time.tzname[0]})")
-    last_sync = 0.0
+    last_sync, last_check = 0.0, time.time()
     while True:
-        due = cron_due(ZIP_CRON, datetime.now())
+        # cron sprawdzany w calym oknie od poprzedniej petli: sync potrafi trwac
+        # godziny, a przy sprawdzaniu tylko biezacej minuty 23:30 by przepadlo
+        now = time.time()
+        due = any(cron_due(ZIP_CRON, datetime.fromtimestamp(t))
+                  for t in range(int(last_check) + 60, int(now) + 60, 60))
+        last_check = now
         if due or time.time() - last_sync >= SYNC_EVERY:
             last_sync = time.time()
             try:
@@ -123,6 +139,8 @@ if __name__ == "__main__":
                     snapshot(current)                    # zip tylko po udanym listingu
             except Exception as e:                       # petla ma przezyc kazdy blad sieci
                 log("BLAD:", repr(e))
+                # ponow za 15 min, nie za pelne SYNC_EVERY - ale bez walenia co minute
+                last_sync = time.time() - SYNC_EVERY + min(900, SYNC_EVERY)
         if os.environ.get("RUN_ONCE"):
             break
         time.sleep(60 - datetime.now().second)           # budzik co pelna minute

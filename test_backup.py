@@ -34,6 +34,9 @@ assert backup.cron_due("0 2 1 * *", datetime(2026, 9, 1, 2, 0)), "1. dnia miesia
 assert backup.cron_due("30 23 * * 1-5", datetime(2026, 9, 9, 23, 30)), "sroda w zakresie"
 assert not backup.cron_due("30 23 * * 1-5", niedz)
 assert backup.cron_due("30 23 * * 0,3", datetime(2026, 9, 9, 23, 30)), "lista dni"
+assert backup.cron_due("30 23 * * 1-7", niedz), "zakres 1-7 obejmuje niedziele"
+assert backup.cron_due("30 23 * * 1-7", pon), "zakres 1-7 obejmuje poniedzialek"
+assert not backup.cron_due("30 23 * * 1-5", niedz), "1-5 to nie niedziela"
 
 # glob na nieistniejacym katalogu nie wybucha (start bez data/zips)
 import shutil; shutil.rmtree(backup.ZIPS)
