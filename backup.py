@@ -56,7 +56,7 @@ def api(path, **params):
             return json.load(urllib.request.urlopen(req, timeout=120)).get("data")
         except urllib.error.HTTPError as e:
             if e.code not in (429, 500, 502, 503, 504) or attempt == 4:
-                raise
+                raise RuntimeError(f"HTTP {e.code} na {path}") from None
             wait = 60 * (attempt + 1)
             log(f"HTTP {e.code}, czekam {wait}s")
             time.sleep(wait)
@@ -83,7 +83,7 @@ def sync():
             current.update(fdir.relative_to(MAIL) / name_for(m) for m in msgs)
             todo = [m for m in msgs if not (fdir / name_for(m)).exists()]
             for m in todo:
-                d = api(f"/accounts/{aid}/folders/{fid}/messages/{m['messageId']}/originalmessage")
+                d = api(f"/accounts/{aid}/messages/{m['messageId']}/originalmessage")
                 (fdir / name_for(m)).write_text(d["content"], encoding="utf-8")
                 new += 1
             if len(msgs) < 200:   # listing lecimy zawsze do konca: przerwany
