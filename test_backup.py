@@ -20,4 +20,23 @@ backup.snapshot({Path("Inbox/2026-01-01_jest_1.eml")})
 [z] = list(backup.ZIPS.glob("*.zip"))
 assert zipfile.ZipFile(z).namelist() == ["Inbox/2026-01-01_jest_1.eml"], zipfile.ZipFile(z).namelist()
 assert (backup.MAIL / "Inbox/2025-01-01_skasowany_2.eml").exists(), "archiwum nigdy nie kasuje"
+# cron: niedziela 23:30
+from datetime import datetime
+niedz, pon = datetime(2026, 9, 6, 23, 30), datetime(2026, 9, 7, 23, 30)
+assert backup.cron_due("30 23 * * 0", niedz)
+assert not backup.cron_due("30 23 * * 0", pon)
+assert not backup.cron_due("30 23 * * 0", datetime(2026, 9, 6, 23, 31))
+assert backup.cron_due("30 23 * * 7", niedz), "7 to tez niedziela"
+assert backup.cron_due("0 3 * * *", datetime(2026, 9, 7, 3, 0)), "codziennie 3:00"
+assert backup.cron_due("*/15 * * * *", datetime(2026, 9, 7, 3, 45)), "co 15 minut"
+assert not backup.cron_due("*/15 * * * *", datetime(2026, 9, 7, 3, 46))
+assert backup.cron_due("0 2 1 * *", datetime(2026, 9, 1, 2, 0)), "1. dnia miesiaca"
+assert backup.cron_due("30 23 * * 1-5", datetime(2026, 9, 9, 23, 30)), "sroda w zakresie"
+assert not backup.cron_due("30 23 * * 1-5", niedz)
+assert backup.cron_due("30 23 * * 0,3", datetime(2026, 9, 9, 23, 30)), "lista dni"
+
+# glob na nieistniejacym katalogu nie wybucha (start bez data/zips)
+import shutil; shutil.rmtree(backup.ZIPS)
+assert not any(backup.ZIPS.glob("*.zip"))
+
 print("ok", n)

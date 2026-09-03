@@ -10,8 +10,10 @@ services:
       ZOHO_CLIENT_SECRET: ""
       ZOHO_REFRESH_TOKEN: ""
       ZOHO_DC: eu                 # region konta: eu | com | in | com.au | jp
+      TZ: Europe/Warsaw           # wedlug tej strefy liczy sie ZIP_CRON
       SYNC_INTERVAL_HOURS: 6      # co ile godzin dociagac nowe maile
-      ZIP_INTERVAL_DAYS: 7        # co ile dni zip ze stanem skrzynki na teraz
-      REQ_INTERVAL: 2.1           # odstep miedzy requestami (limit Zoho: 30/min)
+      ZIP_CRON: "30 23 * * 0"     # zip ze stanem skrzynki: niedziela 23:30
+      REQ_INTERVAL: 2.1           # sekundy miedzy requestami: 60/2.1 = ~28/min
+                                  # (limit Zoho to 30/min; wpisz 3 zeby zejsc do 20/min)
     volumes:
       - ./data:/data              # data/mail/<folder>/*.eml  +  data/zips/*.zip

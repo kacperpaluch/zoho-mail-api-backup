@@ -11,9 +11,25 @@ REFRESH   = os.environ["ZOHO_REFRESH_TOKEN"]
 OUT       = Path(os.environ.get("BACKUP_DIR", "/data"))
 GAP       = float(os.environ.get("REQ_INTERVAL", "2.1"))          # limit 30 req/min
 SYNC_EVERY = float(os.environ.get("SYNC_INTERVAL_HOURS", "6")) * 3600
-ZIP_EVERY  = float(os.environ.get("ZIP_INTERVAL_DAYS", "7")) * 86400
+ZIP_CRON   = os.environ.get("ZIP_CRON", "30 23 * * 0")            # niedziela 23:30
 MAIL, ZIPS = OUT / "mail", OUT / "zips"
 _tok = ["", 0.0]
+
+def _field(spec, val, hi):
+    for part in spec.split(","):
+        part, _, step = part.partition("/")
+        lo, _, up = part.partition("-")
+        lo, up = (0, hi) if part == "*" else (int(lo), int(up or lo))
+        if lo <= val <= up and (val - lo) % int(step or 1) == 0:
+            return True
+    return False
+
+def cron_due(expr, t):
+    """Podzbior crona: 'min godz dzien miesiac dzien_tygodnia', 0 = niedziela.
+    Obsluguje liczby, listy (1,5), zakresy (1-5), kroki (*/15) i '*'."""
+    m, h, dom, mon, dow = expr.split()
+    return (_field(m, t.minute, 59) and _field(h, t.hour, 23) and _field(dom, t.day, 31)
+            and _field(mon, t.month, 12) and _field(dow.replace("7", "0"), (t.weekday() + 1) % 7, 6))
 
 def log(*a): print(datetime.now().strftime("%F %T"), *a, flush=True)
 
@@ -80,9 +96,6 @@ def sync():
 def snapshot(current):
     """Zip = stan skrzynki na teraz: tylko maile, ktore nadal w niej sa."""
     ZIPS.mkdir(parents=True, exist_ok=True)
-    latest = max((p.stat().st_mtime for p in ZIPS.glob("*.zip")), default=0)
-    if time.time() - latest < ZIP_EVERY:
-        return
     dst = ZIPS / f"zoho-{datetime.now():%Y-%m-%d}.zip"
     with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
         for rel in sorted(current):
@@ -92,11 +105,18 @@ def snapshot(current):
         f"archiwum trzyma {total}")
 
 if __name__ == "__main__":
+    log(f"start: sync co {SYNC_EVERY / 3600:g}h, zip wg crona '{ZIP_CRON}' ({time.tzname[0]})")
+    last_sync = 0.0
     while True:
-        try:
-            snapshot(sync())   # zip tylko po udanym pelnym listingu
-        except Exception as e:                 # petla ma przezyc kazdy blad sieci
-            log("BLAD:", repr(e))
+        due = cron_due(ZIP_CRON, datetime.now())
+        if due or time.time() - last_sync >= SYNC_EVERY:
+            last_sync = time.time()
+            try:
+                current = sync()
+                if due or not any(ZIPS.glob("*.zip")):   # zawsze jeden zip na dzien dobry
+                    snapshot(current)                    # zip tylko po udanym listingu
+            except Exception as e:                       # petla ma przezyc kazdy blad sieci
+                log("BLAD:", repr(e))
         if os.environ.get("RUN_ONCE"):
             break
-        time.sleep(SYNC_EVERY)
+        time.sleep(60 - datetime.now().second)           # budzik co pelna minute

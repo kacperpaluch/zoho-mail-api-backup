@@ -9,7 +9,8 @@ zero zaleznosci, obraz ~50 MB.
 w foldery jak w skrzynce. Nic nie jest z niego kasowane: mail usuniety w Zoho zostaje
 na dysku na zawsze.
 
-**Snapshot cykliczny** (`data/zips/`) — co X dni zip ze stanem skrzynki na teraz.
+**Snapshot cykliczny** (`data/zips/`) — zip ze stanem skrzynki na teraz, o porze
+ustawionej cronem (domyslnie w niedziele o 23:30).
 W zipie jest dokladnie to, co w danym dniu bylo w Zoho, bez skasowanych.
 Pakuje lokalny mirror, wiec nie kosztuje ani jednego dodatkowego requestu.
 
@@ -26,8 +27,9 @@ services:
       ZOHO_CLIENT_SECRET: ""
       ZOHO_REFRESH_TOKEN: ""
       ZOHO_DC: eu
+      TZ: Europe/Warsaw
       SYNC_INTERVAL_HOURS: 6
-      ZIP_INTERVAL_DAYS: 7
+      ZIP_CRON: "30 23 * * 0"
       REQ_INTERVAL: 2.1
     volumes:
       - ./data:/data
@@ -42,8 +44,9 @@ Dane OAuth wygenerujesz w api-console.zoho.eu (Self Client), scope tylko do odcz
 |---|---|---|
 | `ZOHO_DC` | `eu` | region konta: eu, com, in, com.au, jp |
 | `SYNC_INTERVAL_HOURS` | 6 | co ile godzin dociagac nowe maile |
-| `ZIP_INTERVAL_DAYS` | 7 | co ile dni snapshot skrzynki |
-| `REQ_INTERVAL` | 2.1 | odstep miedzy requestami (limit Zoho: 30/min) |
+| `ZIP_CRON` | `30 23 * * 0` | kiedy snapshot — skladnia crona (0 = niedziela) |
+| `TZ` | UTC | strefa czasowa dla `ZIP_CRON` |
+| `REQ_INTERVAL` | 2.1 | sekundy miedzy requestami: `60 / REQ_INTERVAL` = req/min |
 | `RUN_ONCE` | — | `1` = jeden przebieg i wyjscie (do crona) |
 
 Pierwszy przebieg sciaga cala skrzynke i od razu robi pierwszy zip. Limit Zoho to
