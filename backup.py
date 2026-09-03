@@ -13,7 +13,7 @@ GAP       = float(os.environ.get("REQ_INTERVAL", "2.1"))          # limit 30 req
 SYNC_EVERY = float(os.environ.get("SYNC_INTERVAL_HOURS", "6")) * 3600
 ZIP_CRON   = os.environ.get("ZIP_CRON", "30 23 * * 0")            # niedziela 23:30
 MAIL, ZIPS = OUT / "mail", OUT / "zips"
-_tok = ["", 0.0]
+_tok, _last_req = ["", 0.0], [0.0]
 
 def _field(spec, val, hi):
     for part in spec.split(","):
@@ -50,7 +50,10 @@ def api(path, **params):
     if params:
         url += "?" + urllib.parse.urlencode(params)
     for attempt in range(5):
-        time.sleep(GAP)
+        # tempo liczone od startu poprzedniego requestu, nie sztywny sen przed kazdym:
+        # inaczej czas trwania requestu doklada sie do odstepu i realny rate spada
+        time.sleep(max(0, GAP - (time.time() - _last_req[0])))
+        _last_req[0] = time.time()
         req = urllib.request.Request(url, headers={"Authorization": f"Zoho-oauthtoken {token()}"})
         try:
             return json.load(urllib.request.urlopen(req, timeout=120)).get("data")
