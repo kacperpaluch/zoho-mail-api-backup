@@ -77,6 +77,7 @@ def sync():
     for f in api(f"/accounts/{aid}/folders"):
         fid, fdir = f["folderId"], MAIL / re.sub(r"[/\\]", "_", f["folderName"])
         fdir.mkdir(parents=True, exist_ok=True)
+        log(f"folder {f['folderName']}: na dysku {len(list(fdir.glob('*.eml')))} .eml")
         start = 1
         while True:
             msgs = api(f"/accounts/{aid}/messages/view", folderId=fid, start=start, limit=200) or []
@@ -86,10 +87,12 @@ def sync():
                 d = api(f"/accounts/{aid}/messages/{m['messageId']}/originalmessage")
                 (fdir / name_for(m)).write_text(d["content"], encoding="utf-8")
                 new += 1
+                if new % 50 == 0:     # pierwszy przebieg trwa godzinami, pokaz ze zyje
+                    log(f"  pobrano {new}, teraz {f['folderName']} (strona od {start})")
             if len(msgs) < 200:   # listing lecimy zawsze do konca: przerwany
                 break             # pierwszy przebieg inaczej zostawilby dziure
             start += 200
-        log(f"  {f['folderName']}: {len(list(fdir.glob('*.eml')))} plikow")
+        log(f"  {f['folderName']}: gotowe, {len(list(fdir.glob('*.eml')))} plikow")
     log(f"nowych maili: {new}, w skrzynce teraz: {len(current)}")
     return current
 
