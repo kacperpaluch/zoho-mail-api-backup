@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Zoho Mail -> .eml, przyrostowo. Raz na X dni zip snapshot katalogu."""
-import json, os, re, time, urllib.error, urllib.parse, urllib.request, zipfile
+import json, os, re, tempfile, time, urllib.error, urllib.parse, urllib.request, zipfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -55,7 +56,7 @@ def token():
     _tok[:] = [r["access_token"], time.time() + r.get("expires_in", 3600) - 60]
     return _tok[0]
 
-def api(path, **params):
+def api(path, *, expected_type=list, **params):
     url = f"https://mail.zoho.{DC}/api{path}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
@@ -66,7 +67,11 @@ def api(path, **params):
         _last_req[0] = time.time()
         req = urllib.request.Request(url, headers={"Authorization": f"Zoho-oauthtoken {token()}"})
         try:
-            return json.load(urllib.request.urlopen(req, timeout=120)).get("data")
+            with urllib.request.urlopen(req, timeout=120) as response:
+                result = json.load(response)
+            if not isinstance(result, dict) or not isinstance(result.get("data"), expected_type):
+                raise RuntimeError(f"Nieprawidlowa odpowiedz API na {path}: oczekiwano data typu {expected_type.__name__}")
+            return result["data"]
         except urllib.error.HTTPError as e:
             body = e.read(500).decode("utf-8", "replace").strip()   # Zoho podaje powod w body
             if e.code not in (429, 500, 502, 503, 504) or attempt == 4:
@@ -82,8 +87,19 @@ def name_for(msg):
     subj = re.sub(r"\s+", "_", subj)
     return f"{day}_{subj}_{msg['messageId']}.eml"
 
+@contextmanager
+def atomic_path(dst):
+    """Publikuje plik dopiero po udanym zapisie w tym samym katalogu."""
+    with tempfile.NamedTemporaryFile(dir=dst.parent, prefix=f".{dst.name}.", suffix=".tmp", delete=False) as f:
+        tmp = Path(f.name)
+    try:
+        yield tmp
+        tmp.replace(dst)
+    finally:
+        tmp.unlink(missing_ok=True)
+
 def sync():
-    """Dociaga brakujace maile. Zwraca zbior sciezek obecnych TERAZ w skrzynce."""
+    """Dociaga brakujace maile. Zwraca sciezki znalezione podczas przebiegu."""
     acc = api("/accounts")[0]
     aid = acc["accountId"]
     log(f"konto {acc.get('primaryEmailAddress', aid)}")
@@ -94,12 +110,15 @@ def sync():
         log(f"folder {f['folderName']}: na dysku {len(list(fdir.glob('*.eml')))} .eml")
         start = 1
         while True:
-            msgs = api(f"/accounts/{aid}/messages/view", folderId=fid, start=start, limit=200) or []
+            msgs = api(f"/accounts/{aid}/messages/view", folderId=fid, start=start, limit=200)
             current.update(fdir.relative_to(MAIL) / name_for(m) for m in msgs)
             todo = [m for m in msgs if not (fdir / name_for(m)).exists()]
             for m in todo:
-                d = api(f"/accounts/{aid}/messages/{m['messageId']}/originalmessage")
-                (fdir / name_for(m)).write_text(d["content"], encoding="utf-8")
+                d = api(f"/accounts/{aid}/messages/{m['messageId']}/originalmessage", expected_type=dict)
+                if not isinstance(d.get("content"), str) or not d["content"].strip():
+                    raise RuntimeError(f"Brak tresci wiadomosci {m['messageId']}")
+                with atomic_path(fdir / name_for(m)) as tmp:
+                    tmp.write_text(d["content"], encoding="utf-8")
                 new += 1
                 if new % 50 == 0:     # pierwszy przebieg trwa godzinami, pokaz ze zyje
                     log(f"  pobrano {new}, teraz {f['folderName']} (strona od {start})")
@@ -111,12 +130,13 @@ def sync():
     return current
 
 def snapshot(current):
-    """Zip = stan skrzynki na teraz: tylko maile, ktore nadal w niej sa."""
+    """Zip zawiera maile znalezione podczas ostatniego udanego przebiegu."""
     ZIPS.mkdir(parents=True, exist_ok=True)
     dst = ZIPS / f"zoho-{datetime.now():%Y-%m-%d}.zip"
-    with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
-        for rel in sorted(current):
-            z.write(MAIL / rel, rel)
+    with atomic_path(dst) as tmp:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+            for rel in sorted(current):
+                z.write(MAIL / rel, rel)
     kept, total = len(current), len(list(MAIL.rglob("*.eml")))
     log(f"zip: {dst.name} - {kept} maili ({dst.stat().st_size / 1e6:.0f} MB), "
         f"archiwum trzyma {total}")

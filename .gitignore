@@ -7,6 +7,12 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+venv/
+.venv/
+*.egg-info/
+htmlcov/
+coverage.xml
+.coverage
 
 # Ogolne
 .DS_Store

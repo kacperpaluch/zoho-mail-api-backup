@@ -51,14 +51,18 @@ data/zips/zoho-2026-09-03.zip
 `.eml` importuje sie do Apple Mail, Thunderbirda itd. Zalaczniki siedza w MIME.
 
 - `data/mail/` rosnie przyrostowo i **nic z niego nie znika** - skasowany w Zoho mail zostaje.
-- `data/zips/` to snapshoty "stan na teraz": w zipie jest dokladnie to, co w danym dniu bylo
-  w skrzynce, bez skasowanych.
+- `data/zips/` zawiera maile znalezione podczas ostatniego udanego przebiegu.
+  To nie jest stan z jednej chwili: podczas pobierania poczta moze przychodzic,
+  znikac lub zmieniac foldery. Maili nieobecnych w listingu nie dodajemy do zipa.
 
 ## Jak dziala dedup
 
 Nazwa pliku jest deterministyczna (data + temat + messageId), wiec istnienie pliku = mail juz
 pobrany. Zadnej bazy ani pliku stanu. Skasujesz plik - pobierze go ponownie.
 Zip pakuje lokalny mirror, wiec nie kosztuje ani jednego requestu do Zoho.
+Maile i ZIP-y zapisywane sa do plikow tymczasowych w tym samym katalogu,
+a docelowa nazwa pojawia sie dopiero po udanym zapisie. Nieprawidlowa odpowiedz API
+przerywa przebieg zamiast byc traktowana jako pusty folder.
 
 ## Rozwoj
 

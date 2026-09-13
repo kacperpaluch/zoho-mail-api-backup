@@ -9,10 +9,14 @@ zero zaleznosci, obraz ~50 MB.
 w foldery jak w skrzynce. Nic nie jest z niego kasowane: mail usuniety w Zoho zostaje
 na dysku na zawsze.
 
-**Snapshot cykliczny** (`data/zips/`) — zip ze stanem skrzynki na teraz, o porze
+**Snapshot cykliczny** (`data/zips/`) — zip z mailami znalezionymi podczas ostatniego
+udanego przebiegu, o porze
 ustawionej cronem (domyslnie w niedziele o 23:30).
-W zipie jest dokladnie to, co w danym dniu bylo w Zoho, bez skasowanych.
+To nie jest stan z jednej chwili: podczas pobierania poczta moze przychodzic,
+znikac lub zmieniac foldery. Maili nieobecnych w listingu nie dodajemy do zipa.
 Pakuje lokalny mirror, wiec nie kosztuje ani jednego dodatkowego requestu.
+Maile i ZIP-y sa zapisywane atomowo przez pliki tymczasowe. Nieprawidlowa
+odpowiedz API przerywa przebieg zamiast udawac pusty folder.
 
 ## Uruchomienie
 
